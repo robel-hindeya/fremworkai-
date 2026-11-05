@@ -2,41 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "./api";
-import {
-  CATS as DEFAULT_CATS,
-  GOALS as DEFAULT_GOALS,
-  PROJECTS as DEFAULT_PROJECTS,
-  SOURCES as DEFAULT_SOURCES,
-  TASKS as DEFAULT_TASKS,
-  TRANSACTIONS as DEFAULT_TXS,
-  type BudgetCat,
-  type Goal,
-  type Project,
-  type Source,
-  type Task,
-  type Tx,
-} from "@/lib/data";
-
-export interface FinancialSummary {
-  cash: number;
-  months: string[];
-  rev: number[];
-  exp: number[];
-  ocf: number[];
-  net: number[];
-  streams: {
-    Oct: Record<string, number>;
-    Sep: Record<string, number>;
-  };
-  octoberSummary: {
-    revenue: number;
-    expenses: number;
-    net: number;
-    operatingCashFlow: number;
-    burnRate: number;
-    runwayMonths: number;
-  };
-}
+import type { BudgetCat, FinancialSummary, Goal, Project, Task, Tx, User } from "@/lib/data";
 
 interface DataContextType {
   transactions: Tx[];
@@ -44,8 +10,8 @@ interface DataContextType {
   goals: Goal[];
   projects: Project[];
   tasks: Task[];
-  dataSources: Source[];
   metrics: FinancialSummary | null;
+  user: User | null;
   loading: boolean;
   error: string | null;
   // Transactions
@@ -69,8 +35,6 @@ interface DataContextType {
   updateTask: (id: string, patch: Partial<Task>) => Promise<void>;
   runTask: (id: string) => Promise<{ success: boolean; message: string }>;
   deleteTask: (id: string) => Promise<void>;
-  // Data Sources
-  syncDataSource: (id: string) => Promise<void>;
   // Refresh
   refresh: () => Promise<void>;
 }
@@ -78,30 +42,30 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | null>(null);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [transactions, setTransactions] = useState<Tx[]>(DEFAULT_TXS);
-  const [budgets, setBudgets] = useState<(BudgetCat & { id?: string })[]>(DEFAULT_CATS);
-  const [goals, setGoals] = useState<Goal[]>(DEFAULT_GOALS);
-  const [projects, setProjects] = useState<Project[]>(DEFAULT_PROJECTS);
-  const [tasks, setTasks] = useState<Task[]>(DEFAULT_TASKS);
-  const [dataSources, setDataSources] = useState<Source[]>(DEFAULT_SOURCES);
+  const [transactions, setTransactions] = useState<Tx[]>([]);
+  const [budgets, setBudgets] = useState<(BudgetCat & { id?: string })[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [user, setUser] = useState<User | null>(null);
   const [metrics, setMetrics] = useState<FinancialSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [txs, bgs, gls, prjs, tsks, srcs, met] = await Promise.all([
-        api.get<any[]>("/api/transactions").catch(() => DEFAULT_TXS),
-        api.get<any[]>("/api/budgets").catch(() => DEFAULT_CATS),
-        api.get<any[]>("/api/goals").catch(() => DEFAULT_GOALS),
-        api.get<any[]>("/api/projects").catch(() => DEFAULT_PROJECTS),
-        api.get<any[]>("/api/scheduled").catch(() => DEFAULT_TASKS),
-        api.get<any[]>("/api/data-sources").catch(() => DEFAULT_SOURCES),
-        api.get<FinancialSummary>("/api/analytics").catch(() => null),
+      const [txs, bgs, gls, prjs, tsks, met, me] = await Promise.all([
+        api.get<any[]>("/api/transactions"),
+        api.get<any[]>("/api/budgets"),
+        api.get<any[]>("/api/goals"),
+        api.get<any[]>("/api/projects"),
+        api.get<any[]>("/api/scheduled"),
+        api.get<FinancialSummary>("/api/analytics"),
+        api.get<{ user: User | null }>("/api/auth/me"),
       ]);
 
       // Normalize transactions
-      const mappedTxs: Tx[] = (Array.isArray(txs) && txs.length ? txs : DEFAULT_TXS).map((t: any) => ({
+      const mappedTxs: Tx[] = txs.map((t: any) => ({
         id: t.id,
         name: t.payee || t.name || "Manual entry",
         memo: t.memo || "",
@@ -113,7 +77,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }));
 
       // Normalize budgets
-      const mappedBudgets = (Array.isArray(bgs) && bgs.length ? bgs : DEFAULT_CATS).map((b: any) => ({
+      const mappedBudgets = bgs.map((b: any) => ({
         id: b.id,
         k: b.categoryName || b.k || "General",
         budget: b.amountMinor !== undefined ? b.amountMinor / 100 : (b.budget ?? 0),
@@ -124,7 +88,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }));
 
       // Normalize goals
-      const mappedGoals: Goal[] = (Array.isArray(gls) && gls.length ? gls : DEFAULT_GOALS).map((g: any) => ({
+      const mappedGoals: Goal[] = gls.map((g: any) => ({
         id: g.id,
         type: g.type,
         name: g.name,
@@ -138,7 +102,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }));
 
       // Normalize tasks
-      const mappedTasks: Task[] = (Array.isArray(tsks) && tsks.length ? tsks : DEFAULT_TASKS).map((t: any) => ({
+      const mappedTasks: Task[] = tsks.map((t: any) => ({
         id: t.id,
         name: t.name,
         prompt: t.prompt,
@@ -149,19 +113,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         on: t.enabled ?? t.on ?? true,
       }));
 
-      // Normalize data sources
-      const mappedSources: Source[] = (Array.isArray(srcs) && srcs.length ? srcs : DEFAULT_SOURCES).map((s: any) => ({
-        id: s.id,
-        name: s.name,
-        kind: s.provider || s.kind || "bank",
-        detail: s.detail || "",
-        status: s.status,
-        message: s.lastRunError || s.errorCode || s.message,
-        progress: s.progress,
-      }));
-
       // Normalize projects
-      const mappedProjects: Project[] = (Array.isArray(prjs) && prjs.length ? prjs : DEFAULT_PROJECTS).map((p: any) => ({
+      const mappedProjects: Project[] = prjs.map((p: any) => ({
         id: p.id,
         name: p.name,
         desc: p.description || p.desc || "",
@@ -176,8 +129,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setGoals(mappedGoals);
       setProjects(mappedProjects);
       setTasks(mappedTasks);
-      setDataSources(mappedSources);
-      if (met) setMetrics(met);
+      setMetrics(met);
+      setUser(me.user);
+      setError(null);
     } catch (err: any) {
       setError(err.message || "Failed to load data");
     } finally {
@@ -221,14 +175,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         };
 
         setTransactions((prev) => prev.map((t) => (t.id === tempId ? mapped : t)));
-        api.get<FinancialSummary>("/api/analytics").then(setMetrics).catch(() => {});
+        refresh();
         return mapped;
       } catch (e) {
         setTransactions((prev) => prev.filter((t) => t.id !== tempId));
         throw e;
       }
     },
-    []
+    [refresh]
   );
 
   const updateTransaction = useCallback(async (tx: Tx) => {
@@ -240,6 +194,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         categoryName: tx.cat,
         amountMinor: Math.round(tx.amt * 100),
       });
+      refresh();
     } catch (e) {
       refresh();
       throw e;
@@ -250,7 +205,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setTransactions((prev) => prev.filter((t) => t.id !== id));
     try {
       await api.delete(`/api/transactions/${id}`);
-      api.get<FinancialSummary>("/api/analytics").then(setMetrics).catch(() => {});
+      refresh();
     } catch (e) {
       refresh();
       throw e;
@@ -443,22 +398,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const runTask = useCallback(async (id: string) => {
     try {
-      const res = await api.post<any>(`/api/scheduled/${id}/run`);
-      if (res.task || res.data) {
-        const updated = res.task || res.data;
-        setTasks((prev) =>
-          prev.map((t) =>
-            t.id === id
-              ? {
-                  ...t,
-                  last: updated.lastRunStatus ? `Status: ${updated.lastRunStatus}` : "Completed",
-                  lastFailed: updated.lastRunStatus === "failed",
-                }
-              : t
-          )
-        );
-      }
-      return { success: res.success !== false, message: res.message || "Executed" };
+      const { task, ok, message } = await api.post<any>(`/api/scheduled/${id}`);
+      setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, last: task.last, lastFailed: task.lastFailed } : t)));
+      return { success: ok, message };
     } catch (e: any) {
       return { success: false, message: e.message || "Execution error" };
     }
@@ -474,32 +416,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [refresh]);
 
-  // Data Sources Actions
-  const syncDataSource = useCallback(async (id: string) => {
-    setDataSources((prev) => prev.map((s) => (s.id === id ? { ...s, status: "syncing", progress: 50 } : s)));
-    try {
-      const res = await api.post<any>(`/api/data-sources/${id}/sync`);
-      if (res.data || res.source) {
-        const updated = res.data || res.source;
-        setDataSources((prev) =>
-          prev.map((s) =>
-            s.id === id
-              ? {
-                  ...s,
-                  status: updated.status,
-                  message: updated.errorCode || undefined,
-                  detail: updated.detail || "Synced just now",
-                }
-              : s
-          )
-        );
-      }
-    } catch (e) {
-      refresh();
-      throw e;
-    }
-  }, [refresh]);
-
   const value = useMemo(
     () => ({
       transactions,
@@ -507,8 +423,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       goals,
       projects,
       tasks,
-      dataSources,
       metrics,
+      user,
       loading,
       error,
       addTransaction,
@@ -527,7 +443,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateTask,
       runTask,
       deleteTask,
-      syncDataSource,
       refresh,
     }),
     [
@@ -536,8 +451,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       goals,
       projects,
       tasks,
-      dataSources,
       metrics,
+      user,
       loading,
       error,
       addTransaction,
@@ -556,7 +471,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updateTask,
       runTask,
       deleteTask,
-      syncDataSource,
       refresh,
     ]
   );

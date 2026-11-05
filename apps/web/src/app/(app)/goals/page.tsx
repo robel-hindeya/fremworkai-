@@ -4,13 +4,13 @@ import { Plus, Target } from "lucide-react";
 import { useState } from "react";
 import { GoalDialog } from "@/components/forms";
 import { Empty, Mark, PageHeader, Progress, Status } from "@/components/ui";
-import { TODAY, fmtDate, money } from "@/lib/format";
+import { fmtDate, money } from "@/lib/format";
 import { useData } from "@/lib/client/store";
 
 export default function Goals() {
   const { goals, addGoal } = useData();
   const [creating, setCreating] = useState(false);
-  const today = new Date(TODAY + "T12:00:00").getTime();
+  const today = Date.now();
 
   return (
     <div className="page">

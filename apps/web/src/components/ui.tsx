@@ -13,13 +13,12 @@ export function Mark({ size = 20 }: { size?: number }) {
   return <Image src="/brand/fremwork-icon-compact.svg" alt="" width={size} height={size} aria-hidden />;
 }
 
-export function PageHeader({ eyebrow, title, sub, demo = true, actions }: { eyebrow: string; title: string; sub?: string; demo?: boolean; actions?: ReactNode }) {
+export function PageHeader({ eyebrow, title, sub, actions }: { eyebrow: string; title: string; sub?: string; actions?: ReactNode }) {
   return (
     <header className="page-head">
       <div>
         <div className="head-row">
           <span className="overline">{eyebrow}</span>
-          {demo && <span className="demo-pill">Demo data</span>}
         </div>
         <h1>{title}</h1>
         {sub && <p>{sub}</p>}

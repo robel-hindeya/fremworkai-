@@ -1,9 +1,8 @@
 "use client";
 
-import { ArrowUp, Check, ChevronDown, FileSpreadsheet, FileText, Image as ImageIcon, Mic, Paperclip, Scale, Search, Square, X, Zap } from "lucide-react";
+import { ArrowUp, Check, ChevronDown, FileSpreadsheet, FileText, Image as ImageIcon, Paperclip, Scale, Search, Square, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useChat, type AttachedFile, type Mode } from "@/components/chat-store";
-import { useToast } from "@/components/toast";
 import { Banner } from "@/components/ui";
 import { checkFiles } from "@/lib/format";
 
@@ -30,7 +29,6 @@ type Props = {
 
 export function Composer({ onSend, docked, busy, onStop, autoFocus, placeholder }: Props) {
   const { mode, setMode } = useChat();
-  const toast = useToast();
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
@@ -77,17 +75,6 @@ export function Composer({ onSend, docked, busy, onStop, autoFocus, placeholder 
     fileRef.current.click();
   };
 
-  const voice = async () => {
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) throw new Error("unsupported");
-      const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-      s.getTracks().forEach((t) => t.stop());
-      toast("Voice transcription will connect when audio backend is configured.");
-    } catch {
-      toast("Microphone access is blocked. Allow it in your browser settings to use voice.", "err");
-    }
-  };
-
   const ModeIcon = MODES.find((x) => x.m === mode)!.icon;
 
   return (
@@ -116,7 +103,7 @@ export function Composer({ onSend, docked, busy, onStop, autoFocus, placeholder 
           ref={taRef}
           rows={1}
           autoFocus={autoFocus}
-          placeholder={placeholder || (docked ? "Reply to Fremwork…" : "Ask about revenue, cash flow, budgets, or upload a statement…")}
+          placeholder={placeholder || (docked ? "Reply to Fremwork…" : "Ask about your finances, or record a transaction…")}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
@@ -187,16 +174,6 @@ export function Composer({ onSend, docked, busy, onStop, autoFocus, placeholder 
           </div>
 
           <span className="spacer" />
-
-          <button
-            type="button"
-            className="composer-btn-circle"
-            aria-label="Voice input"
-            onClick={voice}
-            title="Voice input"
-          >
-            <Mic size={16} />
-          </button>
 
           {busy && onStop ? (
             <button type="button" className="send busy" aria-label="Stop generating" onClick={onStop} title="Stop generating">

@@ -4,45 +4,8 @@ import { useRouter } from "next/navigation";
 import { useChat } from "@/components/chat-store";
 import { Composer } from "@/components/composer";
 import { Mark, Logo } from "@/components/ui";
-import {
-  AlertTriangle,
-  BarChart3,
-  Check,
-  ChevronDown,
-  CreditCard,
-  Scale,
-  Search,
-  TrendingUp,
-  Zap,
-} from "lucide-react";
+import { Check, ChevronDown, Scale, Search, Zap } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
-
-const SUGGESTIONS = [
-  {
-    icon: TrendingUp,
-    title: "Forecast cash runway",
-    desc: "Project cash balance & burn rate for the next 90 days",
-    prompt: "Can you forecast our cash balance and burn rate for the next 90 days?",
-  },
-  {
-    icon: CreditCard,
-    title: "Expense variance",
-    desc: "Analyze October expenses and software subscriptions over budget",
-    prompt: "Show me our October expenses breakdown and identify software subscriptions running over budget.",
-  },
-  {
-    icon: AlertTriangle,
-    title: "Receivables risk",
-    desc: "Audit overdue receivables and customer concentration risk",
-    prompt: "What are our biggest financial risks, overdue receivables, and client concentration?",
-  },
-  {
-    icon: BarChart3,
-    title: "Revenue comparison",
-    desc: "Compare recurring SaaS vs consulting revenue streams",
-    prompt: "Compare our revenue streams and performance versus previous periods.",
-  },
-];
 
 export default function NewChat() {
   const { send, mode, setMode } = useChat();
@@ -59,11 +22,6 @@ export default function NewChat() {
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
-
-  const handleSelectSuggestion = (prompt: string) => {
-    const convoId = send(null, prompt, []);
-    router.push(`/chat/${convoId}`);
-  };
 
   return (
     <div className="chat-layout">
@@ -127,26 +85,6 @@ export default function NewChat() {
             autoFocus
             onSend={(text, files) => router.push(`/chat/${send(null, text, files)}`)}
           />
-
-          <div className="chat-suggestions-grid">
-            {SUGGESTIONS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.title}
-                  type="button"
-                  className="suggestion-card"
-                  onClick={() => handleSelectSuggestion(item.prompt)}
-                >
-                  <div className="suggestion-header">
-                    <Icon size={16} color="var(--blue)" />
-                    <span>{item.title}</span>
-                  </div>
-                  <div className="suggestion-desc">{item.desc}</div>
-                </button>
-              );
-            })}
-          </div>
         </div>
       </main>
     </div>

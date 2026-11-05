@@ -3,8 +3,9 @@
 import { useState, type ReactNode } from "react";
 import { Modal, ResultView, WorkingView } from "@/components/dialog";
 import { Banner, Field } from "@/components/ui";
-import { CATS, PAY_METHODS, TX_CATEGORIES } from "@/lib/data";
-import { TODAY, money } from "@/lib/format";
+import { PAY_METHODS, TX_CATEGORIES } from "@/lib/data";
+import { money, today } from "@/lib/format";
+import { useData } from "@/lib/client/store";
 
 type FieldDef = {
   id: string;
@@ -107,7 +108,7 @@ export function TransactionDialog({ onClose, onAdd }: Close & { onAdd?: (t: { na
   return (
     <FormDialog
       title="Add transaction"
-      sub="Record a payment Fremwork can’t see in your connected accounts."
+      sub="Record money in or out of your business."
       submitLabel="Add transaction"
       onClose={onClose}
       fields={[
@@ -115,26 +116,27 @@ export function TransactionDialog({ onClose, onAdd }: Close & { onAdd?: (t: { na
         { id: "amount", label: "Amount (USD)", type: "number", placeholder: "0.00" },
         { id: "payee", label: "Payee or customer", type: "text", placeholder: "e.g. Amazon Web Services", full: true },
         { id: "memo", label: "Description", type: "text", placeholder: "What was it for?", full: true, hint: "Optional." },
-        { id: "cat", label: "Category", type: "select", options: TX_CATEGORIES, initial: "Software" },
-        { id: "date", label: "Date", type: "date", initial: TODAY },
+        { id: "cat", label: "Category", type: "select", options: TX_CATEGORIES, initial: "Other expense" },
+        { id: "date", label: "Date", type: "date", initial: today() },
         { id: "method", label: "Payment method", type: "select", options: PAY_METHODS, initial: PAY_METHODS[0], full: true },
       ]}
       validate={(v) => ({
         amount: v.amount === "" ? "Enter the amount." : !(+v.amount > 0) ? "Enter an amount greater than zero." : +v.amount > 10_000_000 ? "That’s over $10M. Check the amount, or split it into separate transactions." : "",
         payee: !v.payee.trim() ? "Add who you paid, or who paid you." : "",
-        date: !v.date ? "Pick the date of the payment." : v.date > TODAY ? "The date can’t be in the future." : "",
+        date: !v.date ? "Pick the date of the payment." : v.date > today() ? "The date can’t be in the future." : "",
       })}
       onSubmit={(v) => {
         const amt = (v.type === "Income" ? 1 : -1) * +v.amount;
         onAdd?.({ name: v.payee.trim(), amt, cat: v.cat, date: v.date, method: v.method, memo: v.memo.trim() || "Manual entry" });
-        return ["Transaction added.", `${v.payee.trim()} · ${amt > 0 ? "+" : ""}${money(amt, 2)}. It now shows in Transactions and this month’s budget.`];
+        return ["Transaction added.", `${v.payee.trim()} · ${amt > 0 ? "+" : ""}${money(amt, 2)}. It now shows in Transactions and on your dashboard.`];
       }}
     />
   );
 }
 
 export function BudgetDialog({ onClose, onAdd }: Close & { onAdd?: (b: { k: string; budget: number; owner: string }) => void }) {
-  const existing = CATS.map((c) => c.k.toLowerCase());
+  const { budgets } = useData();
+  const existing = budgets.map((c) => c.k.toLowerCase());
   return (
     <FormDialog
       title="Create budget"
@@ -182,7 +184,7 @@ export function GoalDialog({ onClose, onAdd }: Close & { onAdd?: (g: { type: str
             v.target === "" ? "Enter a target." : !(+v.target > 0) ? "The target must be more than zero."
               : v.cur !== "" && down && +v.target >= +v.cur ? "For an expense reduction, the target must be lower than today’s amount."
               : v.cur !== "" && !down && +v.target <= +v.cur ? "The target must be higher than where you are now." : "",
-          date: !v.date ? "Pick a target date." : v.date <= TODAY ? "Pick a date after today." : "",
+          date: !v.date ? "Pick a target date." : v.date <= today() ? "Pick a date after today." : "",
         };
       }}
       onSubmit={(v) => {
@@ -239,47 +241,6 @@ export function TaskDialog({ onClose, onAdd }: Close & { onAdd?: (t: { name: str
         return ["Scheduled task created.", `${v.name.trim()} runs ${v.freq.toLowerCase()} at ${v.time}.`];
       }}
     />
-  );
-}
-
-export function ExportDialog({ onClose, report = "Profit & Loss", initialFormat = "PDF" }: Close & { report?: string; initialFormat?: string }) {
-  const [attempt, setAttempt] = useState(0);
-  const [phase, setPhase] = useState<"form" | "working" | "failed" | "done">("form");
-  const [format, setFormat] = useState(initialFormat);
-  const [period, setPeriod] = useState("October 2026");
-  const run = () => {
-    setPhase("working");
-    setTimeout(() => {
-      // The first long-range export fails, to show the error state.
-      if (period === "Year to date 2026" && attempt === 0) setPhase("failed");
-      else setPhase("done");
-      setAttempt((a) => a + 1);
-    }, 1300);
-  };
-  const file = `${report.replace(/[^A-Za-z]+/g, "_")}_${period.replace(/ /g, "_")}.${format.toLowerCase()}`;
-  return (
-    <Modal title={`Export ${report}`} sub="Harbor & Pine Co." onClose={onClose}
-      footer={phase === "form" ? <><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={run}>Export</button></> : undefined}>
-      {phase === "form" && (
-        <div className="dialog-body">
-          <div className="form-grid">
-            <Field id="ex-format" label="Format">{(a) => <select {...a} className="select" value={format} onChange={(e) => setFormat(e.target.value)}><option>PDF</option><option>XLSX</option><option>CSV</option></select>}</Field>
-            <Field id="ex-period" label="Period" hint={period === "Year to date 2026" ? "Long periods can take a minute." : undefined}>{(a) => <select {...a} className="select" value={period} onChange={(e) => setPeriod(e.target.value)}><option>October 2026</option><option>September 2026</option><option>Q3 2026</option><option>Year to date 2026</option></select>}</Field>
-          </div>
-        </div>
-      )}
-      {phase === "working" && <WorkingView label={`Building your ${format}…`} />}
-      {phase === "failed" && (
-        <>
-          <div className="result" role="alert">
-            <span className="circle err">!</span>
-            <div><b>We couldn’t build the export.</b><p>The report service timed out. Your data is safe. Try again, or pick a shorter period.</p></div>
-          </div>
-          <div className="dialog-foot"><button className="btn" onClick={onClose}>Close</button><button className="btn primary" onClick={run}>Try again</button></div>
-        </>
-      )}
-      {phase === "done" && <ResultView tone="ok" title="Your export is ready." onClose={onClose} extra={<button className="btn">Download</button>}>{file} · 184 KB</ResultView>}
-    </Modal>
   );
 }
 

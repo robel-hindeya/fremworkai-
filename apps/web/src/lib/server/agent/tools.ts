@@ -1,7 +1,6 @@
 import { TransactionsRepo } from "../repositories/transactions";
 import { BudgetsRepo } from "../repositories/budgets";
 import { GoalsRepo } from "../repositories/goals";
-import { TasksRepo } from "../repositories/tasks";
 import { FinancialService } from "../services/analytics";
 
 export interface ToolDefinition {
@@ -56,10 +55,10 @@ export const FINANCIAL_AGENT_TOOLS: Record<string, ToolDefinition> = {
       const created = TransactionsRepo.create({
         name: args.name,
         amt,
-        cat: args.category || "Software",
+        cat: args.category || "Other expense",
         date: args.date || new Date().toISOString().split("T")[0],
         memo: args.memo || "Recorded by Fremwork AI Agent",
-        method: args.method || "Corporate card ··4417",
+        method: args.method || "Other",
         status: "Cleared",
       });
       return {
@@ -78,15 +77,17 @@ export const FINANCIAL_AGENT_TOOLS: Record<string, ToolDefinition> = {
       const metrics = FinancialService.getMetrics();
       const budgets = BudgetsRepo.getAll();
       const overBudgets = budgets.filter((b) => b.oct > b.budget);
+      const { revenue, expenses, net, runwayMonths } = metrics.summary;
 
       return {
+        hasData: metrics.hasData,
+        period: metrics.periodLabel,
         cashOnHand: metrics.cash,
-        octoberRevenue: metrics.octoberSummary.revenue,
-        octoberExpenses: metrics.octoberSummary.expenses,
-        netProfit: metrics.octoberSummary.net,
-        netMarginPct: +((metrics.octoberSummary.net / (metrics.octoberSummary.revenue || 1)) * 100).toFixed(1),
-        operatingCashFlow: metrics.octoberSummary.operatingCashFlow,
-        runwayMonths: metrics.octoberSummary.runwayMonths,
+        revenue,
+        expenses,
+        netProfit: net,
+        netMarginPct: revenue ? +((net / revenue) * 100).toFixed(1) : null,
+        runwayMonths,
         budgetAlerts: overBudgets.map((b) => ({
           category: b.k,
           budget: b.budget,
@@ -152,7 +153,7 @@ export const FINANCIAL_AGENT_TOOLS: Record<string, ToolDefinition> = {
         type: args.type || "Savings target",
         cur: Number(args.current || 0),
         target: Number(args.target),
-        date: args.date || "2027-01-31",
+        date: args.date,
       });
       return {
         success: true,
@@ -172,8 +173,8 @@ export const FINANCIAL_AGENT_TOOLS: Record<string, ToolDefinition> = {
     execute: (args) => {
       const metrics = FinancialService.getMetrics();
       const currentCash = metrics.cash;
-      const baseMonthlyBurn = metrics.octoberSummary.expenses;
-      const baseMonthlyRev = metrics.octoberSummary.revenue;
+      const baseMonthlyBurn = metrics.summary.expenses;
+      const baseMonthlyRev = metrics.summary.revenue;
 
       const dCost = Number(args.monthlyCostChange || 0);
       const dRev = Number(args.monthlyRevenueChange || 0);
@@ -194,17 +195,6 @@ export const FINANCIAL_AGENT_TOOLS: Record<string, ToolDefinition> = {
         projectedRunwayMonths: newRunway,
         differenceMonths: typeof newRunway === "number" ? +(newRunway - baseRunway).toFixed(1) : "N/A",
       };
-    },
-  },
-
-  runScheduledTask: {
-    name: "runScheduledTask",
-    description: "Execute a scheduled financial report or monitoring job.",
-    parameters: {
-      taskId: "ID of task (e.g. t1, t2, t3, t4)",
-    },
-    execute: (args) => {
-      return TasksRepo.runTask(args.taskId);
     },
   },
 };

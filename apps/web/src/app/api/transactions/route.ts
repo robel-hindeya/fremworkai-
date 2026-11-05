@@ -29,10 +29,10 @@ export async function POST(req: NextRequest) {
     const created = TransactionsRepo.create({
       name: body.name,
       amt: Number(body.amt),
-      cat: body.cat || "Software",
+      cat: body.cat || "Other expense",
       date: body.date,
       memo: body.memo || "Manual entry",
-      method: body.method || "Corporate card ··4417",
+      method: body.method || "Other",
       status: body.status || "Cleared",
     });
 

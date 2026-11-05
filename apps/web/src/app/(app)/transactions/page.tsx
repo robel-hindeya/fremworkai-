@@ -3,24 +3,17 @@
 import { useSearchParams } from "next/navigation";
 import { Download, Plus, Search, X } from "lucide-react";
 import { Suspense, useMemo, useState } from "react";
-import { ConfirmDialog, ExportDialog, TransactionDialog } from "@/components/forms";
+import { ConfirmDialog, TransactionDialog } from "@/components/forms";
 import { useToast } from "@/components/toast";
-import { Banner, Empty, Field, PageHeader, Status } from "@/components/ui";
+import { Empty, Field, PageHeader, Status } from "@/components/ui";
 import { STATUS_TONE, TX_CATEGORIES, type Tx } from "@/lib/data";
-import { TODAY, fmtDate, money, signedMoney } from "@/lib/format";
+import { downloadCsv, fmtDate, money, signedMoney } from "@/lib/format";
 import { useData } from "@/lib/client/store";
 
 const RANGES = [{ v: "7", l: "Last 7 days" }, { v: "30", l: "Last 30 days" }, { v: "90", l: "Last 90 days" }, { v: "all", l: "All time" }];
 
 function Details({ tx, onChange, onDelete, onClose }: { tx: Tx; onChange: (t: Tx) => void; onDelete: () => void; onClose: () => void }) {
-  const [note, setNote] = useState("");
   const toast = useToast();
-  const notes: Partial<Record<Tx["status"], [string, string]>> = {
-    Flagged: ["Needs attention", "Booked less than 7 days before travel, outside your travel policy. Add a note for your accountant."],
-    Failed: ["Payment failed", "The customer’s card was declined on Oct 17. Fremwork can draft a payment reminder."],
-    Pending: ["Waiting for payment", "The invoice is sent. Fremwork will mark it cleared when the money lands."],
-  };
-  const n = notes[tx.status];
   return (
     <aside className="card" aria-label="Transaction details" style={{ display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "16px 20px", borderBottom: "1px solid var(--line)" }}>
@@ -36,17 +29,11 @@ function Details({ tx, onChange, onDelete, onClose }: { tx: Tx; onChange: (t: Tx
           <dt className="muted">Description</dt><dd style={{ margin: 0 }}>{tx.memo}</dd>
           <dt className="muted">Date</dt><dd style={{ margin: 0 }}>{fmtDate(tx.date)}</dd>
           <dt className="muted">Payment method</dt><dd style={{ margin: 0 }}>{tx.method}</dd>
-          <dt className="muted">Account</dt><dd style={{ margin: 0 }}>Operating account ··2210</dd>
-          <dt className="muted">Receipt</dt><dd style={{ margin: 0, color: tx.amt < 0 && tx.status === "Flagged" ? "var(--neg)" : undefined }}>{tx.amt > 0 ? "Not required" : tx.status === "Flagged" ? "Missing" : "Attached"}</dd>
         </dl>
         <Field id="tx-cat" label="Category">{(a) => <select {...a} className="select" value={tx.cat} onChange={(e) => { onChange({ ...tx, cat: e.target.value }); toast(`Category changed to ${e.target.value}`); }}>{TX_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>}</Field>
-        {n && <Banner tone={tx.status === "Failed" ? "err" : tx.status === "Pending" ? "info" : "warn"} title={n[0] + "."}>{n[1]}</Banner>}
-        <Field id="tx-note" label="Note for your accountant" error={note.length > 500 ? `Keep notes under 500 characters (${note.length} now).` : undefined}>
-          {(a) => <textarea {...a} className="textarea" rows={3} placeholder="Add context" value={note} onChange={(e) => setNote(e.target.value)} />}
-        </Field>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "14px 20px", borderTop: "1px solid var(--line)", marginTop: "auto" }}>
-        <button className="btn primary" disabled={tx.status === "Reviewed" || note.length > 500} onClick={() => { onChange({ ...tx, status: "Reviewed" }); toast(`${tx.id} marked as reviewed`); }}>
+        <button className="btn primary" disabled={tx.status === "Reviewed"} onClick={() => { onChange({ ...tx, status: "Reviewed" }); toast(`${tx.id} marked as reviewed`); }}>
           {tx.status === "Reviewed" ? "Reviewed" : "Mark as reviewed"}
         </button>
         <button className="btn text-danger" style={{ marginLeft: "auto" }} onClick={onDelete}>Delete</button>
@@ -61,14 +48,14 @@ function TransactionsInner() {
   const { transactions: list, addTransaction, updateTransaction, deleteTransaction } = useData();
   const [tab, setTab] = useState<"all" | "income" | "expense">("all");
   const [q, setQ] = useState("");
-  const [range, setRange] = useState("90");
+  const [range, setRange] = useState("all");
   const [cat, setCat] = useState("all");
   const [sel, setSel] = useState<string | null>(params.get("tx"));
-  const [dialog, setDialog] = useState<"add" | "export" | "delete" | null>(null);
+  const [dialog, setDialog] = useState<"add" | "delete" | null>(null);
 
   const rows = useMemo(() => {
     const days = range === "all" ? Infinity : +range;
-    const t0 = new Date(TODAY + "T12:00:00").getTime();
+    const t0 = Date.now();
     const s = q.trim().toLowerCase();
     return list.filter((t) =>
       (tab === "all" || (tab === "income" ? t.amt > 0 : t.amt < 0)) &&
@@ -82,13 +69,14 @@ function TransactionsInner() {
   const moneyIn = rows.filter((t) => t.amt > 0).reduce((a, t) => a + t.amt, 0);
   const moneyOut = rows.filter((t) => t.amt < 0).reduce((a, t) => a + t.amt, 0);
   const count = (k: typeof tab) => list.filter((t) => k === "all" || (k === "income" ? t.amt > 0 : t.amt < 0)).length;
-  const filtered = q || cat !== "all" || range !== "90" || tab !== "all";
-  const clear = () => { setQ(""); setCat("all"); setRange("90"); setTab("all"); };
+  const filtered = q || cat !== "all" || range !== "all" || tab !== "all";
+  const clear = () => { setQ(""); setCat("all"); setRange("all"); setTab("all"); };
+  const exportCsv = () => downloadCsv("Transactions.csv", [["ID", "Date", "Name", "Memo", "Category", "Method", "Status", "Amount"], ...rows.map((t) => [t.id, t.date, t.name, t.memo, t.cat, t.method, t.status, t.amt])]);
 
   return (
     <div className="page">
       <PageHeader eyebrow="Financial tools" title="Transactions" sub="Every payment in and out, with status and payment method."
-        actions={<><button className="btn" onClick={() => setDialog("export")}><Download size={16} />Export CSV</button><button className="btn primary" onClick={() => setDialog("add")}><Plus size={16} />Add transaction</button></>} />
+        actions={<><button className="btn" disabled={rows.length === 0} onClick={exportCsv}><Download size={16} />Export CSV</button><button className="btn primary" onClick={() => setDialog("add")}><Plus size={16} />Add transaction</button></>} />
 
       <div className="grid" style={{ gridTemplateColumns: selected ? "minmax(0,1fr) minmax(0,360px)" : "minmax(0,1fr)", alignItems: "start" }}>
         <section className="card" style={{ overflow: "hidden" }}>
@@ -104,7 +92,11 @@ function TransactionsInner() {
             <label htmlFor="tx-cat-filter" className="sr-only">Category</label>
             <select id="tx-cat-filter" className="select pill-input" style={{ width: "auto" }} value={cat} onChange={(e) => setCat(e.target.value)}><option value="all">All categories</option>{TX_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
           </div>
-          {rows.length === 0 ? (
+          {list.length === 0 ? (
+            <Empty icon={<Plus size={18} />} title="No transactions yet." action={<button className="btn primary" onClick={() => setDialog("add")}>Add your first transaction</button>}>
+              Everything on your dashboard is built from the transactions you add here.
+            </Empty>
+          ) : rows.length === 0 ? (
             <Empty icon={<Search size={18} />} title="No transactions match these filters." action={filtered ? <button className="btn" onClick={clear}>Clear filters</button> : undefined}>
               {q ? `Nothing matches “${q}”. Check the spelling, or try a wider date range.` : "Try a wider date range or another category."}
             </Empty>
@@ -147,7 +139,6 @@ function TransactionsInner() {
       </div>
 
       {dialog === "add" && <TransactionDialog onClose={() => setDialog(null)} onAdd={(t) => addTransaction(t)} />}
-      {dialog === "export" && <ExportDialog onClose={() => setDialog(null)} />}
       {dialog === "delete" && selected && (
         <ConfirmDialog
           title={`Delete ${selected.id}?`}

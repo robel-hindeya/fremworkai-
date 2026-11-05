@@ -7,15 +7,28 @@ export interface BudgetRecord extends BudgetCat {
   created_at?: string;
 }
 
+/** Spending per lower-cased category for one month (YYYY-MM), from the ledger. */
+function spentIn(month: string): Record<string, number> {
+  const rows = getDb()
+    .prepare("SELECT LOWER(cat) AS cat, SUM(-amt) AS spent FROM transactions WHERE amt < 0 AND status != 'Failed' AND substr(date, 1, 7) = ? GROUP BY LOWER(cat)")
+    .all(month) as any[];
+  return Object.fromEntries(rows.map((r) => [r.cat, Number(r.spent)]));
+}
+
+const monthKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
 export const BudgetsRepo = {
   getAll(): BudgetRecord[] {
     const db = getDb();
     const rows = db.prepare("SELECT * FROM budgets ORDER BY budget DESC").all() as any[];
+    const now = new Date();
+    const thisMonth = spentIn(monthKey(now));
+    const lastMonth = spentIn(monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1)));
     return rows.map((r) => ({
       id: r.id,
       k: r.k,
-      oct: Number(r.oct),
-      sep: Number(r.sep),
+      oct: thisMonth[r.k.toLowerCase()] ?? 0,
+      sep: lastMonth[r.k.toLowerCase()] ?? 0,
       budget: Number(r.budget),
       owner: r.owner,
       alert: r.alert,

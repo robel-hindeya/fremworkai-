@@ -26,7 +26,7 @@ export const TasksRepo = {
     const db = getDb();
     const id = `t-${Date.now().toString(36)}`;
     const now = new Date().toISOString();
-    const next = data.next || "Scheduled next cycle";
+    const next = data.next || "Run manually";
 
     db.prepare(`
       INSERT INTO tasks (id, name, prompt, freq, next_run, last_run, last_failed, is_on, created_at)
@@ -78,29 +78,6 @@ export const TasksRepo = {
       on: Boolean(r.is_on),
       created_at: r.created_at,
     };
-  },
-
-  runTask(id: string): { success: boolean; message: string; task: TaskRecord } {
-    const db = getDb();
-    const t = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as any;
-    if (!t) throw new Error("Task not found");
-
-    const nowStr = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
-    const isRevenueReport = /revenue/i.test(t.name);
-
-    if (isRevenueReport) {
-      // Check bank feed status
-      const bank = db.prepare("SELECT status FROM data_sources WHERE id = 'bank'").get() as any;
-      if (bank && bank.status === "error") {
-        this.update(id, { last: `${nowStr} · Failed: bank feed disconnected`, lastFailed: true });
-        const updated = this.getAll().find((x) => x.id === id)!;
-        return { success: false, message: "Run failed: Bank feed is disconnected. Reconnect your bank feed first.", task: updated };
-      }
-    }
-
-    this.update(id, { last: `${nowStr} · Completed`, lastFailed: false });
-    const updated = this.getAll().find((x) => x.id === id)!;
-    return { success: true, message: `Task "${t.name}" executed successfully.`, task: updated };
   },
 
   delete(id: string): boolean {

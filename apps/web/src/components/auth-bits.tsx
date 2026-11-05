@@ -20,17 +20,4 @@ export function PasswordField({ id, label, value, onChange, error, hint, autoCom
   );
 }
 
-export function GoogleButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" className="btn lg block" onClick={onClick}>
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" aria-hidden><path d="M12 3a9 9 0 1 0 8.5 12H12v-4h9" /></svg>
-      Continue with Google
-    </button>
-  );
-}
-
-export function DemoNote({ children }: { children: React.ReactNode }) {
-  return <p className="demo-pill" style={{ margin: 0, alignSelf: "center", textAlign: "center", whiteSpace: "normal" }}>{children}</p>;
-}
-
 export const passwordRule = (pw: string) => (!pw ? "Create a password." : pw.length < 8 ? "Use at least 8 characters." : !/\d/.test(pw) || !/[a-z]/i.test(pw) ? "Include at least one letter and one number." : "");

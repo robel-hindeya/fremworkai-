@@ -15,7 +15,7 @@ export function kfmt(n: number): string {
 }
 
 export function pct(a: number, b: number): number {
-  return ((a - b) / Math.abs(b)) * 100;
+  return b ? ((a - b) / Math.abs(b)) * 100 : 0;
 }
 
 export function fmtDate(iso: string): string {
@@ -32,8 +32,21 @@ export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(" ");
 }
 
-/** Demo "today" so the sample data always lines up. */
-export const TODAY = "2026-10-31";
+/** Today's date as YYYY-MM-DD in the user's local time. */
+export function today(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function downloadCsv(filename: string, rows: (string | number)[][]) {
+  const cell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const blob = new Blob([rows.map((r) => r.map(cell).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
 
 export const MAX_FILE_BYTES = 25e6;
 export const MAX_FILES = 10;

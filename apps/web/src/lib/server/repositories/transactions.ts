@@ -86,7 +86,7 @@ export const TransactionsRepo = {
       data.date,
       data.amt,
       data.status || "Cleared",
-      data.method || "Corporate card ··4417",
+      data.method || "Other",
       data.note || null,
       now
     );

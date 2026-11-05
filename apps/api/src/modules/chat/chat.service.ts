@@ -17,28 +17,9 @@ export class ChatService {
   private readonly logger = new Logger(ChatService.name);
   private anthropic: Anthropic | null = null;
   private geminiApiKey: string | null = null;
-  private geminiModel: string = 'gemini-3.5-flash';
+  private geminiModel: string = 'gemini-3.6-flash';
 
-  private conversations: Conversation[] = [
-    {
-      id: 'cash-runway',
-      workspaceId: 'default-workspace-harbor-pine',
-      title: 'October cash runway review',
-      createdBy: 'usr-1',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messages: [],
-    },
-    {
-      id: 'software-audit',
-      workspaceId: 'default-workspace-harbor-pine',
-      title: 'Software spend audit',
-      createdBy: 'usr-1',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      messages: [],
-    },
-  ];
+  private conversations: Conversation[] = [];
 
   constructor(
     private readonly ledgerService: LedgerService,
@@ -46,8 +27,9 @@ export class ChatService {
     private readonly workersService: WorkersService,
   ) {
     // 1. Google Gemini AI configuration
-    this.geminiApiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
-    this.geminiModel = process.env.GEMINI_MODEL || 'gemini-3.5-flash';
+    const rawGeminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || null;
+    this.geminiApiKey = rawGeminiKey && !rawGeminiKey.includes('your_') ? rawGeminiKey : null;
+    this.geminiModel = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
     if (this.geminiApiKey) {
       this.logger.log(`Google Gemini AI initialized with model ${this.geminiModel}`);
     }
@@ -60,7 +42,7 @@ export class ChatService {
     }
 
     if (!this.geminiApiKey && !this.anthropic) {
-      this.logger.log('No AI keys provided. Operating in deterministic tool-executing AI mode.');
+      this.logger.warn('No AI keys provided. Chat will report that the AI is not connected.');
     }
   }
 
@@ -112,7 +94,7 @@ export class ChatService {
         input_schema: {
           type: 'object',
           properties: {
-            expression: { type: 'string', description: 'Mathematical expression (e.g. "539500 / 178300")' },
+            expression: { type: 'string', description: 'Mathematical expression (e.g. "1200 / 300")' },
             label: { type: 'string', description: 'What this calculation computes' },
           },
           required: ['expression'],
@@ -148,7 +130,7 @@ export class ChatService {
       },
       {
         name: 'get_financial_summary',
-        description: 'Fetch cash balance, October revenue, expenses, net profit, and runway months.',
+        description: 'Fetch cash balance, revenue, expenses, net profit, and runway months.',
         input_schema: {
           type: 'object',
           properties: {},
@@ -353,7 +335,6 @@ export class ChatService {
     // Stream meta
     res.write(`event: meta\ndata: ${JSON.stringify({ mode, status: 'streaming' })}\n\n`);
 
-    const q = queryText.toLowerCase();
     const blocks: AnswerBlock[] = [];
 
     // 1. Check if Gemini API is available
@@ -372,203 +353,12 @@ export class ChatService {
         await this.handleClaudeStream(workspaceId, text, res, blocks);
         return;
       } catch (err: any) {
-        this.logger.error(`Claude API error: ${err.message}. Falling back to deterministic agent.`);
+        this.logger.error(`Claude API error: ${err.message}. No provider left.`);
       }
     }
 
-    // High-fidelity Deterministic Reasoning & Tool Execution Engine
-    await this.handleDeterministicEngine(workspaceId, text, res, blocks);
-  }
-
-  private async handleDeterministicEngine(
-    workspaceId: string,
-    text: string,
-    res: Response,
-    blocks: AnswerBlock[],
-  ) {
-    const q = text.toLowerCase();
-
-    // 1. Action: Add / Record transaction
-    const addMatch = text.match(/(?:add|record|enter|create)\s+(?:an?\s+)?(?:expense|transaction|payment|income|cost)?\s*(?:of\s+)?\$?([0-9,.]+)\s*(?:for|to|from)?\s*([^.,\n]+)?/i);
-    if (addMatch && !/budget|goal|task/i.test(text)) {
-      const rawAmt = parseFloat(addMatch[1].replace(/,/g, ''));
-      const isIncome = /income|received|revenue|client paid/i.test(text);
-      const payee = (addMatch[2] || 'Manual entry').replace(/\s+(in|under|on|date)\s+.*$/i, '').trim();
-      const amt = isIncome ? rawAmt : -rawAmt;
-
-      let category = 'Software';
-      if (/flight|hotel|travel/i.test(text)) category = 'Travel';
-      else if (/ads|marketing/i.test(text)) category = 'Marketing';
-      else if (/payroll|salary/i.test(text)) category = 'Payroll';
-      else if (/hosting|aws|server/i.test(text)) category = 'Cost of services';
-
-      const toolRes = await this.executeTool(workspaceId, 'record_transaction', {
-        payee,
-        amount_dollars: amt,
-        category,
-      });
-
-      const b1: AnswerBlock = {
-        type: 'text',
-        text: `I have recorded the transaction into your unified ledger:\n\n* **ID**: \`${toolRes.transactionId}\`\n* **Payee**: ${payee}\n* **Category**: ${category}\n* **Amount**: ${amt > 0 ? '+' : ''}$${Math.abs(amt).toLocaleString()}\n* **Status**: Cleared`,
-      };
-      const b2: AnswerBlock = {
-        type: 'recommendation',
-        items: [
-          'Overview figures and monthly burn rate have been updated automatically.',
-          'Attach a digital receipt or invoice in the Transactions ledger if required for audit.',
-        ],
-      };
-
-      this.sendBlock(res, b1, blocks);
-      this.sendBlock(res, b2, blocks);
-      this.sendDone(res, 240, 180);
-      return;
-    }
-
-    // 2. Scenario / Hiring / Runway analysis
-    if (/hire|what if|scenario|runway if|drop|increase spend|cut/i.test(q)) {
-      const dollarMatch = text.match(/\$([0-9,.]+)/);
-      const monthCostMatch = text.match(/([0-9,.]+)\s*(?:dollars|\/mo|per month|a month)/i);
-      const addedCost = dollarMatch
-        ? parseFloat(dollarMatch[1].replace(/,/g, ''))
-        : monthCostMatch
-        ? parseFloat(monthCostMatch[1].replace(/,/g, ''))
-        : 16000;
-
-      const sim = await this.executeTool(workspaceId, 'simulate_scenario', {
-        monthly_expense_delta: addedCost,
-      });
-
-      const b1: AnswerBlock = {
-        type: 'text',
-        text: `### Scenario Simulation: Added Outflow of $${addedCost.toLocaleString()}/month\n\nSimulating hiring impact on cash balance and reserve runway against your baseline October burn rate of **$${sim.baseBurn.toLocaleString()}**:`,
-      };
-      const b2: AnswerBlock = {
-        type: 'table',
-        head: ['Metric', 'Baseline', 'Projected', 'Variance'],
-        rows: [
-          ['Monthly Burn', `$${sim.baseBurn.toLocaleString()}`, `$${sim.projectedBurn.toLocaleString()}`, `+$${addedCost.toLocaleString()}`],
-          ['Monthly Net Cash Flow', '+$68,500', `$${sim.projectedNet.toLocaleString()}`, `-$${addedCost.toLocaleString()}`],
-          ['Runway Reserve', `${sim.baseRunwayMonths} months`, `${sim.projectedRunwayMonths} months`, `${sim.differenceMonths} months`],
-        ],
-        foot: ['Cash on Hand', `$${sim.cash.toLocaleString()}`, `$${sim.cash.toLocaleString()}`, '$0'],
-      };
-      const b3: AnswerBlock = {
-        type: 'calc',
-        working: `Baseline Burn: $${sim.baseBurn.toLocaleString()}/mo\nAdded Cost: $${addedCost.toLocaleString()}/mo\nProjected Burn: $${sim.baseBurn.toLocaleString()} + $${addedCost.toLocaleString()} = $${sim.projectedBurn.toLocaleString()}/mo\nRunway: $${sim.cash.toLocaleString()} / $${sim.projectedBurn.toLocaleString()} = ${sim.projectedRunwayMonths} months`,
-        result: `${sim.projectedRunwayMonths} months reserve under scenario`,
-      };
-      const b4: AnswerBlock = {
-        type: 'recommendation',
-        items: [
-          'To preserve the 3-month policy reserve, consider staggering the start date to Q1 2027.',
-          'Chase the $86.4k in overdue invoices older than 45 days to expand the cash cushion.',
-        ],
-      };
-
-      this.sendBlock(res, b1, blocks);
-      this.sendBlock(res, b2, blocks);
-      this.sendBlock(res, b3, blocks);
-      this.sendBlock(res, b4, blocks);
-      this.sendDone(res, 480, 360);
-      return;
-    }
-
-    // 3. Forecast / Cash runway
-    if (/forecast|runway|projection|predict/i.test(q)) {
-      const summary = await this.executeTool(workspaceId, 'get_financial_summary', {});
-      const b1: AnswerBlock = {
-        type: 'text',
-        text: `Base case: cash rises from **$${summary.cashOnHand.toLocaleString()}** today to approximately **$625,900** by January 2027. Collections are projected to grow 3% monthly and comfortably absorb year-end bonuses.`,
-      };
-      const b2: AnswerBlock = {
-        type: 'table',
-        head: ['', 'Nov 2026', 'Dec 2026', 'Jan 2027'],
-        rows: [
-          ['Cash in', '$254,200', '$261,800', '$248,100'],
-          ['Cash out', '($181,500)', '($192,400)', '($176,900)'],
-          ['Net cash flow', '+$72,700', '+$69,400', '+$71,200'],
-        ],
-        foot: ['Closing cash', '$485,300', '$554,700', '$625,900'],
-      };
-      const b3: AnswerBlock = {
-        type: 'calc',
-        working: `Jan Closing Cash: $625,900 - $86,400 (stress factor) = $539,500\nDownside Runway: 539,500 / 178,300 = 3.0 months`,
-        result: '3.0 months reserve runway under conservative downside stress test',
-      };
-      const b4: AnswerBlock = {
-        type: 'recommendation',
-        items: [
-          'Maintain payment terms strictly at Net 30 for new enterprise accounts.',
-          'Automate reminder notifications 3 days before invoice due dates.',
-        ],
-      };
-
-      this.sendBlock(res, b1, blocks);
-      this.sendBlock(res, b2, blocks);
-      this.sendBlock(res, b3, blocks);
-      this.sendBlock(res, b4, blocks);
-      this.sendDone(res, 520, 410);
-      return;
-    }
-
-    // 4. Expenses / Software / Budgets
-    if (/expens|software|spend|cost|budget/i.test(q)) {
-      const budgets = await this.executeTool(workspaceId, 'get_budgets_status', {});
-      const b1: AnswerBlock = {
-        type: 'text',
-        text: `October expenses closed at **$178,300**, up 5.3% on September. Software spending was **$9,640**, running 20.5% over its $8,000 monthly budget.`,
-      };
-      const b2: AnswerBlock = {
-        type: 'table',
-        head: ['Category', 'Budget', 'Oct Actual', 'Status'],
-        rows: [
-          ['Payroll', '$95,000', '$94,200', 'ON TRACK'],
-          ['Cost of services', '$24,000', '$21,860', 'ON TRACK'],
-          ['Software', '$8,000', '$9,640', 'OVER BUDGET (+20.5%)'],
-          ['Travel', '$4,000', '$5,120', 'OVER BUDGET (+28.0%)'],
-          ['Marketing', '$14,000', '$11,850', 'ON TRACK'],
-        ],
-      };
-      const b3: AnswerBlock = {
-        type: 'calc',
-        working: `Software Budget: $8,000\nSoftware Actual: $9,640\nVariance: +$1,640 (+20.5%)\n14 Unused Seats: Slack (6), HubSpot (3), Figma (5) = $1,180/month`,
-        result: '$14,160 annual cost savings identified',
-      };
-      const b4: AnswerBlock = {
-        type: 'recommendation',
-        items: [
-          'De-provision 14 inactive seats across Slack, HubSpot, and Figma to recover $1,180/mo.',
-          'Transition Figma and Notion to annual billing to capture a 15–20% prepayment discount.',
-        ],
-      };
-
-      this.sendBlock(res, b1, blocks);
-      this.sendBlock(res, b2, blocks);
-      this.sendBlock(res, b3, blocks);
-      this.sendBlock(res, b4, blocks);
-      this.sendDone(res, 440, 310);
-      return;
-    }
-
-    // 5. Default General Overview
-    const summary = await this.executeTool(workspaceId, 'get_financial_summary', {});
-    const b1: AnswerBlock = {
-      type: 'text',
-      text: `October was your highest revenue month at **$246,800**, up 3.4% on September. Operating profit stood at **$68,500** with a 27.8% net margin. Current cash balance is **$412,600**.`,
-    };
-    const b2: AnswerBlock = {
-      type: 'recommendation',
-      items: [
-        'Collect the 3 overdue client invoices older than 45 days ($86,400 total).',
-        'Establish a 14-day advance booking requirement for corporate travel.',
-      ],
-    };
-
-    this.sendBlock(res, b1, blocks);
-    this.sendBlock(res, b2, blocks);
-    this.sendDone(res, 380, 220);
+    this.sendBlock(res, { type: 'text', text: 'The AI is not available right now. Check GEMINI_API_KEY and GEMINI_MODEL, then try again.' }, blocks);
+    this.sendDone(res, 0, 0);
   }
 
   private async handleClaudeStream(
@@ -654,7 +444,7 @@ Always invoke the calculate tool for arithmetic steps. Return valid JSON blocks.
         parameters: {
           type: 'OBJECT',
           properties: {
-            expression: { type: 'STRING', description: 'Mathematical expression (e.g. "539500 / 178300")' },
+            expression: { type: 'STRING', description: 'Mathematical expression (e.g. "1200 / 300")' },
             label: { type: 'STRING', description: 'What this calculation computes' },
           },
           required: ['expression'],
@@ -690,7 +480,7 @@ Always invoke the calculate tool for arithmetic steps. Return valid JSON blocks.
       },
       {
         name: 'get_financial_summary',
-        description: 'Fetch cash balance, October revenue, expenses, net profit, and runway months.',
+        description: 'Fetch cash balance, revenue, expenses, net profit, and runway months.',
         parameters: {
           type: 'OBJECT',
           properties: {},

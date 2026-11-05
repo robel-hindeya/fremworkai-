@@ -6,11 +6,11 @@ import { useToast } from "@/components/toast";
 import { Banner, Field, PageHeader } from "@/components/ui";
 
 const FAQS = [
-  ["Where does Fremwork get my financial data?", "From your accounting software, bank feeds and files you upload (PDF, XLSX and CSV). This preview uses a demo ledger."],
+  ["Where does Fremwork get my financial data?", "From the transactions you add, either on the Transactions page or by telling the AI in chat."],
   ["How accurate are the answers?", "Fremwork shows its calculations so you can check them. Choose Deep Analysis for scenario work, and review figures before you file or share them."],
   ["Can my accountant use Fremwork?", "Yes. Invite them from Settings › Company. Accountants can view reports and conversations in projects you share."],
   ["Is my data used to train models?", "No, not by default. You can review this under Settings › AI model."],
-  ["Why does a chat say it can’t see my data?", "The question is about a period or account Fremwork isn’t connected to. Connect it in Data sources, or upload a statement for that period."],
+  ["Why does a chat say it can’t see my data?", "There are no transactions for that period yet. Add them and ask again."],
 ];
 
 export default function Help() {
@@ -25,7 +25,7 @@ export default function Help() {
 
   return (
     <div className="page">
-      <PageHeader eyebrow="Account" title="Help & Support" sub="Guides, answers and a direct line to our team." demo={false} />
+      <PageHeader eyebrow="Account" title="Help & Support" sub="Guides, answers and a direct line to our team." />
       <div className="grid cols-4">
         {[[BookOpen, "Getting started", "Connect data, ask your first question and read the overview."], [MessageSquare, "Using the AI assistant", "Reasoning modes, uploads and exports."], [FileText, "Reports and statements", "Generate, customise and export financial reports."], [Shield, "Security and privacy", "How your data is stored, encrypted and protected."]].map(([I, t, d]) => {
           const Icon = I as typeof BookOpen;
@@ -50,7 +50,7 @@ export default function Help() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}><div><b style={{ display: "block", fontWeight: 500 }}>Email</b><span className="mono muted" style={{ fontSize: 13, userSelect: "all" }}>support@fremwork.com</span></div><button className="btn sm" onClick={copy}><Copy size={14} />Copy</button></div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, borderTop: "1px solid var(--mist)", paddingTop: 14 }}><div><b style={{ display: "block", fontWeight: 500 }}>Telegram</b><span className="mono muted" style={{ fontSize: 13 }}>t.me/fremwork</span></div><a className="btn sm" href="https://t.me/fremwork" target="_blank" rel="noopener noreferrer">Open ↗</a></div>
           {state === "sent" ? (
-            <Banner tone="ok" title="Message sent.">We’ll reply to selam@harborpine.co. Your reference is FW-48213.</Banner>
+            <Banner tone="ok" title="Message sent.">We’ll reply by email.</Banner>
           ) : (
             <form noValidate style={{ display: "grid", gap: 12, borderTop: "1px solid var(--mist)", paddingTop: 14 }} onSubmit={(e) => {
               e.preventDefault();

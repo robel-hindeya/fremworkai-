@@ -6,10 +6,10 @@ import { ArrowLeftRight, FileText, Folder, MessageSquare, Search as SearchIcon }
 import { useState, type ReactNode } from "react";
 import { useChat } from "@/components/chat-store";
 import { Empty } from "@/components/ui";
-import { PROJECTS, TRANSACTIONS } from "@/lib/data";
 import { fmtDate, signedMoney } from "@/lib/format";
+import { useData } from "@/lib/client/store";
 
-const REPORTS = [["Profit & Loss", "Revenue, costs and net profit"], ["Balance Sheet", "Assets, liabilities and equity"], ["Cash Flow Statement", "Operating, investing and financing cash flows"], ["Revenue Report", "Revenue by stream and top customers"], ["Expense Report", "Spending by category against budget"]];
+const REPORTS = [["Profit & Loss", "Revenue, costs and net profit"], ["Revenue Report", "Revenue by category"], ["Expense Report", "Spending by category against budget"]];
 
 function Hl({ text, q }: { text: string; q: string }) {
   const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
@@ -24,13 +24,14 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 export default function SearchPage() {
   const [q, setQ] = useState("");
   const { conversations, send } = useChat();
+  const { transactions, projects } = useData();
   const router = useRouter();
   const s = q.trim().toLowerCase();
   const m = (t: string) => t.toLowerCase().includes(s);
   const chats = s ? conversations.filter((c) => m(c.title) || c.messages.some((x) => x.role === "user" && m(x.text))) : [];
-  const txs = s ? TRANSACTIONS.filter((t) => m(`${t.name} ${t.memo} ${t.cat} ${t.id}`)).slice(0, 8) : [];
+  const txs = s ? transactions.filter((t) => m(`${t.name} ${t.memo} ${t.cat} ${t.id}`)).slice(0, 8) : [];
   const reps = s ? REPORTS.filter(([a, b]) => m(a + " " + b)) : [];
-  const projs = s ? PROJECTS.filter((p) => m(p.name + " " + p.desc)) : [];
+  const projs = s ? projects.filter((p) => m(p.name + " " + p.desc)) : [];
   const total = chats.length + txs.length + reps.length + projs.length;
 
   return (
@@ -44,7 +45,7 @@ export default function SearchPage() {
       </div>
       {!s ? (
         <Group title="Try searching for">
-          {["Lumen Health", "Software", "Cash flow", "Board pack", "Travel"].map((t) => <button key={t} className="list-row" onClick={() => setQ(t)}><SearchIcon size={18} color="var(--faint)" /><span className="main"><b>{t}</b></span></button>)}
+          {["Software", "Payroll", "Profit & Loss", "Travel"].map((t) => <button key={t} className="list-row" onClick={() => setQ(t)}><SearchIcon size={18} color="var(--faint)" /><span className="main"><b>{t}</b></span></button>)}
         </Group>
       ) : total === 0 ? (
         <div className="card"><Empty icon={<SearchIcon size={18} />} title={`Nothing matches “${q.trim()}”.`} action={<button className="btn primary" onClick={() => router.push(`/chat/${send(null, q.trim(), [])}`)}>Ask Fremwork instead</button>}>Check the spelling, or try a payee, category or report name.</Empty></div>

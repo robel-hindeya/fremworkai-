@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/server/db";
+import { hashPassword } from "@/lib/server/password";
 
 export const runtime = "nodejs";
 
@@ -12,20 +13,19 @@ export async function POST(req: NextRequest) {
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    if (cleanEmail === "selam@harborpine.co") {
+    const db = getDb();
+
+    if (db.prepare("SELECT id FROM users WHERE email = ?").get(cleanEmail)) {
       return NextResponse.json({ success: false, error: "An account with that email already exists. Sign in instead." }, { status: 409 });
     }
 
-    const db = getDb();
     const id = `usr-${Date.now().toString(36)}`;
-    const now = new Date().toISOString();
+    const safeUser = { id, email: cleanEmail, name: name || cleanEmail.split("@")[0], company: company || "", role: "Owner" };
 
     db.prepare(`
-      INSERT OR REPLACE INTO users (id, email, password_hash, name, company, role, created_at)
+      INSERT INTO users (id, email, password_hash, name, company, role, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(id, cleanEmail, password, name || cleanEmail.split("@")[0], company || "Harbor & Pine Co.", "Owner", now);
-
-    const safeUser = { id, email: cleanEmail, name: name || cleanEmail.split("@")[0], company: company || "Harbor & Pine Co.", role: "Owner" };
+    `).run(id, cleanEmail, hashPassword(password), safeUser.name, safeUser.company, safeUser.role, new Date().toISOString());
 
     const response = NextResponse.json({ success: true, user: safeUser }, { status: 201 });
     response.cookies.set("fremwork_session", id, {

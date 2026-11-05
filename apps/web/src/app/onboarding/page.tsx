@@ -72,7 +72,7 @@ export default function Onboarding() {
         {step === 1 && (
           <section className="card card-pad form-grid">
             {tried && !name.trim() && <div className="full"><Banner tone="err">Fix the highlighted field to continue.</Banner></div>}
-            <Field id="ob-name" label="Company name" className="full" error={tried && !name.trim() ? "Enter your company’s name. It appears on your reports." : undefined}>{(a) => <input {...a} className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Harbor & Pine Co." />}</Field>
+            <Field id="ob-name" label="Company name" className="full" error={tried && !name.trim() ? "Enter your company’s name. It appears on your reports." : undefined}>{(a) => <input {...a} className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your company" />}</Field>
             <Field id="ob-ind" label="Industry">{(a) => <select {...a} className="select"><option>Software & SaaS</option><option>Professional services</option><option>Retail</option><option>Manufacturing</option><option>Hospitality</option><option>Other</option></select>}</Field>
             <Field id="ob-country" label="Country">{(a) => <select {...a} className="select"><option>Ethiopia</option><option>Kenya</option><option>United States</option><option>United Kingdom</option><option>Other</option></select>}</Field>
             <Field id="ob-cur" label="Reporting currency">{(a) => <select {...a} className="select"><option>USD — US dollar</option><option>ETB — Ethiopian birr</option><option>KES — Kenyan shilling</option><option>EUR — Euro</option></select>}</Field>

@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  BarChart3, ChevronDown, Clock, CreditCard, Database, FileText, Folder, HelpCircle, LayoutGrid, LogOut, Menu,
+  BarChart3, ChevronDown, Clock, Database, FileText, Folder, HelpCircle, LayoutGrid, LogOut, Menu,
   MessageSquare, PanelLeft, Plus, Search, SlidersHorizontal, Target, Wallet, ArrowLeftRight, WifiOff, X,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useChat } from "@/components/chat-store";
 import { ConfirmDialog } from "@/components/forms";
 import { Banner, Logo, Mark } from "@/components/ui";
+import { api } from "@/lib/client/api";
+import { useData } from "@/lib/client/store";
 import { cx } from "@/lib/format";
 
 type Item = { href: string; label: string; icon: typeof Plus; kbd?: string };
@@ -39,16 +41,19 @@ const isActive = (path: string, href: string) => path === href || path.startsWit
 
 function SignOut({ onClose }: { onClose: () => void }) {
   const router = useRouter();
+  const { user, refresh } = useData();
   return (
-    <ConfirmDialog title="Sign out of Fremwork?" sub="selam@harborpine.co" confirmLabel="Sign out" onClose={onClose}
-      body="Scheduled tasks keep running while you’re signed out. You’ll get their results by email."
-      onConfirm={() => router.push("/sign-in")} />
+    <ConfirmDialog title="Sign out of Fremwork?" sub={user?.email} confirmLabel="Sign out" onClose={onClose}
+      body="You can sign back in at any time."
+      onConfirm={async () => { await api.post("/api/auth/me").catch(() => {}); await refresh(); router.push("/sign-in"); }} />
   );
 }
 
 export function Sidebar() {
   const path = usePathname();
   const { conversations } = useChat();
+  const { user } = useData();
+  const initial = (user?.name || "?").charAt(0).toUpperCase();
   const [slim, setSlim] = useState(false);
   const [shut, setShut] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState(false);
@@ -104,17 +109,19 @@ export function Sidebar() {
       <div className="side-foot" ref={footRef}>
         {menu && (
           <nav className="account-menu" aria-label="Account">
-            {!slim && <div style={{ padding: "6px 10px 8px", borderBottom: "1px solid var(--mist)", marginBottom: 4 }}><div style={{ fontWeight: 500 }}>Selam</div><div className="muted" style={{ fontSize: 12.5 }}>selam@harborpine.co</div></div>}
-            {[{ href: "/settings", label: "Settings", icon: SlidersHorizontal }, { href: "/settings?tab=billing", label: "Subscription & billing", icon: CreditCard }, { href: "/help", label: "Help & Support", icon: HelpCircle }].map((it) => (
+            {!slim && user && <div style={{ padding: "6px 10px 8px", borderBottom: "1px solid var(--mist)", marginBottom: 4 }}><div style={{ fontWeight: 500 }}>{user.name}</div><div className="muted" style={{ fontSize: 12.5 }}>{user.email}</div></div>}
+            {[{ href: "/settings", label: "Settings", icon: SlidersHorizontal }, { href: "/help", label: "Help & Support", icon: HelpCircle }].map((it) => (
               <Link key={it.label} href={it.href} className="nav-item" onClick={() => setMenu(false)} aria-label={slim ? it.label : undefined}><it.icon size={18} aria-hidden />{!slim && <span className="label">{it.label}</span>}</Link>
             ))}
-            <button type="button" className="nav-item" onClick={() => { setMenu(false); setSignOut(true); }} aria-label={slim ? "Sign out" : undefined}><LogOut size={18} aria-hidden />{!slim && <span className="label">Sign out</span>}</button>
+            {user
+              ? <button type="button" className="nav-item" onClick={() => { setMenu(false); setSignOut(true); }} aria-label={slim ? "Sign out" : undefined}><LogOut size={18} aria-hidden />{!slim && <span className="label">Sign out</span>}</button>
+              : <Link href="/sign-in" className="nav-item" onClick={() => setMenu(false)} aria-label={slim ? "Sign in" : undefined}><LogOut size={18} aria-hidden />{!slim && <span className="label">Sign in</span>}</Link>}
           </nav>
         )}
-        <button type="button" className="profile-btn" aria-expanded={menu} aria-label="Account menu for Selam, Pro plan" onClick={() => setMenu(!menu)}>
-          <span className="avatar">S</span>
+        <button type="button" className="profile-btn" aria-expanded={menu} aria-label="Account menu" onClick={() => setMenu(!menu)}>
+          <span className="avatar">{initial}</span>
           {!slim && <>
-            <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}><b style={{ display: "block", fontWeight: 500 }}>Selam</b><span className="muted" style={{ fontSize: 12 }}>Pro plan · Harbor &amp; Pine</span></span>
+            <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}><b style={{ display: "block", fontWeight: 500 }}>{user?.name ?? "Your account"}</b><span className="muted" style={{ fontSize: 12 }}>{user ? user.company : "Not signed in"}</span></span>
             <ChevronDown size={16} color="var(--muted)" style={{ transform: menu ? "rotate(180deg)" : undefined }} />
           </>}
         </button>

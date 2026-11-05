@@ -10,10 +10,6 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  Cpu,
-  Download,
-  FileSpreadsheet,
-  FileText,
   FolderPlus,
   RefreshCw,
   Sparkles,
@@ -22,25 +18,23 @@ import {
   Wrench,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Answer, Table, Recos } from "@/components/answers";
 import { useChat, type Message } from "@/components/chat-store";
 import { Composer } from "@/components/composer";
 import { Modal } from "@/components/dialog";
+import { Markdown } from "@/components/markdown";
 import { useToast } from "@/components/toast";
 import { Banner, Empty, Field, Mark } from "@/components/ui";
-import { PROJECTS } from "@/lib/data";
+import { useData } from "@/lib/client/store";
 
-function AiMessage({ m, convoId }: { m: Extract<Message, { role: "ai" }>; convoId: string }) {
-  const { stop, retry, usage } = useChat();
+function AiMessage({ m, convoId, isLast }: { m: Extract<Message, { role: "ai" }>; convoId: string; isLast: boolean }) {
+  const { stop, retry } = useChat();
   const toast = useToast();
-  const bodyRef = useRef<HTMLDivElement>(null);
   const [showThought, setShowThought] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
     try {
-      const textToCopy = bodyRef.current?.innerText ?? m.text ?? "";
-      await navigator.clipboard.writeText(textToCopy);
+      await navigator.clipboard.writeText(m.text ?? "");
       setCopied(true);
       toast("Answer copied to clipboard");
       setTimeout(() => setCopied(false), 2000);
@@ -67,13 +61,7 @@ function AiMessage({ m, convoId }: { m: Extract<Message, { role: "ai" }>; convoI
               <span className="pulse-dot" />
               <span className="pulse-dot" />
             </div>
-            <span className="thinking-text">
-              {m.mode === "Deep Analysis"
-                ? "Autonomous agent reasoning and running financial scenarios…"
-                : m.mode === "Fast"
-                ? "Querying ledger database…"
-                : "Executing agent tools and analyzing ledger…"}
-            </span>
+            <span className="thinking-text">Reading your ledger…</span>
             <button className="btn sm ghost stop-btn" onClick={() => stop(convoId, m.id)}>
               <Square size={11} fill="currentColor" /> Stop
             </button>
@@ -83,52 +71,35 @@ function AiMessage({ m, convoId }: { m: Extract<Message, { role: "ai" }>; convoI
         {m.status === "error" && (
           <Banner
             tone="err"
-            title="Fremwork couldn’t finish this answer."
+            title="Fremwork couldn’t answer."
             action={
               <button className="btn sm" onClick={() => retry(convoId, m.id)}>
                 <RefreshCw size={14} /> Retry
               </button>
             }
           >
-            The connection dropped before the answer was ready. Nothing was lost. Check you’re online, then retry.
+            {m.error}
           </Banner>
         )}
 
         {m.status === "stopped" && (
           <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
             <span className="muted">You stopped this answer.</span>
-            <button className="btn sm" onClick={() => retry(convoId, m.id)}>
-              <RefreshCw size={14} /> Regenerate
-            </button>
+            {isLast && (
+              <button className="btn sm" onClick={() => retry(convoId, m.id)}>
+                <RefreshCw size={14} /> Regenerate
+              </button>
+            )}
           </div>
-        )}
-
-        {m.status === "limit" && (
-          <Banner
-            tone="warn"
-            title="You’ve used all your analyses for this month."
-            action={
-              <Link className="btn sm primary" href="/settings?tab=billing">
-                Upgrade
-              </Link>
-            }
-          >
-            Your Pro plan includes {usage.limit.toLocaleString()} a month, and it resets on Nov 14. Upgrade to Business to keep going now.
-          </Banner>
         )}
 
         {m.status === "done" && (
           <>
-            {/* Agent Thought & Tool Execution Process (ChatGPT o1/o3 style) */}
             {m.thought && (
               <div className="thought-accordion">
-                <button
-                  type="button"
-                  className="thought-toggle"
-                  onClick={() => setShowThought(!showThought)}
-                >
+                <button type="button" className="thought-toggle" onClick={() => setShowThought(!showThought)}>
                   <Sparkles size={14} color="var(--blue)" />
-                  <span style={{ flex: 1 }}>Reasoning Process &amp; Tool Execution</span>
+                  <span style={{ flex: 1 }}>Tools used</span>
                   {showThought ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 </button>
                 {showThought && (
@@ -151,7 +122,6 @@ function AiMessage({ m, convoId }: { m: Extract<Message, { role: "ai" }>; convoI
               </div>
             )}
 
-            {/* Actions Confirmed */}
             {m.actionsTaken && m.actionsTaken.length > 0 && (
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {m.actionsTaken.map((act, idx) => (
@@ -164,72 +134,19 @@ function AiMessage({ m, convoId }: { m: Extract<Message, { role: "ai" }>; convoI
               </div>
             )}
 
-            {/* Live Streamed Typed Blocks from NestJS AI Engine */}
-            {m.blocks && m.blocks.length > 0 ? (
-              <div ref={bodyRef} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {m.blocks.map((blk, idx) => {
-                  if (blk.type === "text") {
-                    return (
-                      <div key={idx} style={{ fontSize: 15.5, lineHeight: 1.65, whiteSpace: "pre-line", color: "var(--ink)" }}>
-                        {blk.text}
-                      </div>
-                    );
-                  }
-                  if (blk.type === "table") {
-                    return <Table key={idx} head={blk.head} rows={blk.rows} foot={blk.foot} />;
-                  }
-                  if (blk.type === "calc") {
-                    return (
-                      <pre key={idx} className="calc">
-                        {blk.working}
-                        {"\n\nResult: "}{blk.result}
-                      </pre>
-                    );
-                  }
-                  if (blk.type === "recommendation") {
-                    return <Recos key={idx} items={blk.items} />;
-                  }
-                  return null;
-                })}
-              </div>
-            ) : (
-              <>
-                {/* Agent Dynamic Text */}
-                {m.text && (
-                  <div style={{ fontSize: 15.5, lineHeight: 1.65, whiteSpace: "pre-line", color: "var(--ink)" }}>
-                    {m.text}
-                  </div>
-                )}
+            {m.text && <Markdown>{m.text}</Markdown>}
 
-                {/* Rich Charts & Calculation Cards */}
-                <div ref={bodyRef} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                  <Answer kind={m.kind} fileName={m.fileName} />
-                </div>
-              </>
-            )}
-
-            {/* Action Buttons Bar */}
             <div className="ai-actions-bar">
               <button className="ai-action-btn" onClick={copy} title={copied ? "Copied!" : "Copy response"}>
                 {copied ? <Check size={14} color="var(--pos)" /> : <Copy size={14} />}
                 <span className="action-label">{copied ? "Copied" : "Copy"}</span>
               </button>
-              <button className="ai-action-btn" onClick={() => toast("Exporting PDF report...")} title="Export as PDF">
-                <Download size={14} />
-                <span className="action-label">PDF</span>
-              </button>
-              <button className="ai-action-btn" onClick={() => toast("Exporting Excel spreadsheet...")} title="Export as Excel">
-                <FileSpreadsheet size={14} />
-                <span className="action-label">XLSX</span>
-              </button>
-              <button className="ai-action-btn" onClick={() => toast("Saved to Financial Reports")} title="Save to reports">
-                <FileText size={14} />
-                <span className="action-label">Save</span>
-              </button>
-              <button className="ai-action-btn" onClick={() => retry(convoId, m.id)} title="Regenerate answer">
-                <RefreshCw size={14} />
-                <span className="action-label">Regenerate</span>
-              </button>
+              {isLast && (
+                <button className="ai-action-btn" onClick={() => retry(convoId, m.id)} title="Regenerate answer">
+                  <RefreshCw size={14} />
+                  <span className="action-label">Regenerate</span>
+                </button>
+              )}
             </div>
           </>
         )}
@@ -240,11 +157,12 @@ function AiMessage({ m, convoId }: { m: Extract<Message, { role: "ai" }>; convoI
 
 export default function Thread() {
   const { id } = useParams<{ id: string }>();
-  const { conversations, send, stop, addToProject } = useChat();
+  const { conversations, loaded, send, stop, addToProject } = useChat();
+  const { projects } = useData();
   const toast = useToast();
   const convo = conversations.find((c) => c.id === id);
   const [picker, setPicker] = useState(false);
-  const [projectId, setProjectId] = useState(PROJECTS[0].id);
+  const [projectId, setProjectId] = useState("");
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const [showScrollBottom, setShowScrollBottom] = useState(false);
@@ -252,7 +170,8 @@ export default function Thread() {
   const count = convo?.messages.length ?? 0;
   const last = convo?.messages.at(-1);
   const busy = last?.role === "ai" && last.status === "thinking";
-  const project = PROJECTS.find((p) => p.id === convo?.projectId);
+  const project = projects.find((p) => p.id === convo?.projectId);
+  const chosenProject = projectId || projects[0]?.id;
 
   const scrollToBottom = () => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -270,6 +189,7 @@ export default function Thread() {
   };
 
   if (!convo) {
+    if (!loaded) return <div className="page" />;
     return (
       <div className="page">
         <div className="card" style={{ maxWidth: 560, margin: "48px auto 0" }}>
@@ -329,7 +249,7 @@ export default function Thread() {
                 </div>
               </div>
             ) : (
-              <AiMessage key={m.id} m={m} convoId={convo.id} />
+              <AiMessage key={m.id} m={m} convoId={convo.id} isLast={m.id === last?.id} />
             )
           )}
           <div ref={endRef} />
@@ -337,13 +257,7 @@ export default function Thread() {
       </div>
 
       {showScrollBottom && (
-        <button
-          type="button"
-          className="scroll-bottom-btn"
-          onClick={scrollToBottom}
-          aria-label="Scroll to bottom"
-          title="Scroll to bottom"
-        >
+        <button type="button" className="scroll-bottom-btn" onClick={scrollToBottom} aria-label="Scroll to bottom" title="Scroll to bottom">
           <ArrowDown size={16} />
         </button>
       )}
@@ -366,34 +280,40 @@ export default function Thread() {
       {picker && (
         <Modal
           title="Add to project"
-          sub="Group this conversation with related files and reports."
+          sub="Group this conversation with related chats and reports."
           onClose={() => setPicker(false)}
           footer={
             <>
               <button className="btn" onClick={() => setPicker(false)}>Cancel</button>
-              <button
-                className="btn primary"
-                onClick={() => {
-                  addToProject(convo.id, projectId);
-                  setPicker(false);
-                  toast(`Added to ${PROJECTS.find((p) => p.id === projectId)?.name}`);
-                }}
-              >
-                Add to project
-              </button>
+              {projects.length > 0 && (
+                <button
+                  className="btn primary"
+                  onClick={() => {
+                    addToProject(convo.id, chosenProject);
+                    setPicker(false);
+                    toast(`Added to ${projects.find((p) => p.id === chosenProject)?.name}`);
+                  }}
+                >
+                  Add to project
+                </button>
+              )}
             </>
           }
         >
           <div className="dialog-body">
-            <Field id="proj-pick" label="Choose project">
-              {(a) => (
-                <select {...a} className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-                  {PROJECTS.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              )}
-            </Field>
+            {projects.length === 0 ? (
+              <p className="muted" style={{ margin: 0 }}>You don’t have any projects yet. <Link href="/projects">Create one first.</Link></p>
+            ) : (
+              <Field id="proj-pick" label="Choose project">
+                {(a) => (
+                  <select {...a} className="select" value={chosenProject} onChange={(e) => setProjectId(e.target.value)}>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+            )}
           </div>
         </Modal>
       )}

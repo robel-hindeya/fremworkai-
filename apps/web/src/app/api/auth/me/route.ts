@@ -13,10 +13,6 @@ export async function GET(req: NextRequest) {
       user = db.prepare("SELECT id, email, name, company, role FROM users WHERE id = ?").get(sessionId);
     }
 
-    if (!user) {
-      user = db.prepare("SELECT id, email, name, company, role FROM users LIMIT 1").get();
-    }
-
     return NextResponse.json({ success: true, user: user || null });
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });

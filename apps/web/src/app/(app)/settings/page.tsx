@@ -1,13 +1,12 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bell, Building2, Coins, Cpu, CreditCard, Shield, User } from "lucide-react";
+import { Bell, Building2, Coins, Cpu, User } from "lucide-react";
 import { Suspense, useState } from "react";
-import { Modal, ResultView } from "@/components/dialog";
-import { ConfirmDialog } from "@/components/forms";
 import { useToast } from "@/components/toast";
-import { Banner, Field, Progress, Switch } from "@/components/ui";
+import { Banner, Field, Switch } from "@/components/ui";
 import { isEmail } from "@/lib/format";
+import { useData } from "@/lib/client/store";
 
 const TABS = [
   { k: "profile", l: "Profile", icon: User },
@@ -15,8 +14,6 @@ const TABS = [
   { k: "finance", l: "Financial preferences", icon: Coins },
   { k: "ai", l: "AI model", icon: Cpu },
   { k: "notifications", l: "Notifications", icon: Bell },
-  { k: "security", l: "Security", icon: Shield },
-  { k: "billing", l: "Subscription & billing", icon: CreditCard },
 ] as const;
 type TabKey = (typeof TABS)[number]["k"];
 
@@ -61,50 +58,6 @@ function SaveBar({ f, toast }: { f: FormState; toast: (t: string, tone?: "ok" | 
   );
 }
 
-function PasswordDialog({ onClose }: { onClose: () => void }) {
-  const [v, setV] = useState({ cur: "", next: "", again: "" });
-  const [tried, setTried] = useState(false);
-  const [wrong, setWrong] = useState(false);
-  const [done, setDone] = useState(false);
-  const e = {
-    cur: !v.cur ? "Enter your current password." : wrong ? "That isn’t your current password." : "",
-    next: !v.next ? "Create a new password." : v.next.length < 8 ? "Use at least 8 characters." : !/\d/.test(v.next) || !/[a-z]/i.test(v.next) ? "Include at least one letter and one number." : v.next === v.cur ? "Pick a password you haven’t used here before." : "",
-    again: v.again !== v.next ? "The passwords don’t match." : "",
-  };
-  const bad = Object.values(e).filter(Boolean).length;
-  if (done) return <Modal title="Change password" onClose={onClose}><ResultView tone="ok" title="Password changed." onClose={onClose}>We signed you out on your other devices.</ResultView></Modal>;
-  const set = (k: keyof typeof v) => (x: { target: { value: string } }) => { setV({ ...v, [k]: x.target.value }); if (k === "cur") setWrong(false); };
-  return (
-    <Modal title="Change password" sub="You’ll stay signed in on this device." onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn primary" onClick={() => { if (bad) return setTried(true); if (v.cur !== "demo1234") { setWrong(true); setTried(true); return; } setDone(true); }}>Change password</button></>}>
-      <div className="dialog-body">
-        {tried && bad > 0 && <Banner tone="err">Fix the highlighted fields.</Banner>}
-        <Field id="pw-cur" label="Current password" error={tried ? e.cur : undefined} hint="Demo: demo1234">{(a) => <input {...a} type="password" className="input" value={v.cur} onChange={set("cur")} autoComplete="current-password" />}</Field>
-        <Field id="pw-new" label="New password" error={tried ? e.next : undefined} hint="At least 8 characters, with a letter and a number.">{(a) => <input {...a} type="password" className="input" value={v.next} onChange={set("next")} autoComplete="new-password" />}</Field>
-        <Field id="pw-again" label="Confirm new password" error={tried ? e.again : undefined}>{(a) => <input {...a} type="password" className="input" value={v.again} onChange={set("again")} autoComplete="new-password" />}</Field>
-      </div>
-    </Modal>
-  );
-}
-
-function DeleteWorkspace({ onClose }: { onClose: () => void }) {
-  const [text, setText] = useState("");
-  const [tried, setTried] = useState(false);
-  const router = useRouter();
-  const ok = text === "Harbor & Pine Co.";
-  return (
-    <Modal title="Delete workspace?" sub="Harbor & Pine Co." onClose={onClose}
-      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn danger" onClick={() => (ok ? router.push("/sign-up") : setTried(true))}>Delete workspace</button></>}>
-      <div className="dialog-body">
-        <Banner tone="err" title="This can’t be undone.">All chats, reports, budgets, goals and connections are deleted for everyone in the workspace after 30 days.</Banner>
-        <Field id="del-confirm" label="Type the company name to confirm" error={tried && !ok ? "That doesn’t match. Type Harbor & Pine Co. exactly." : undefined}>
-          {(a) => <input {...a} className="input" value={text} onChange={(e) => setText(e.target.value)} placeholder="Harbor & Pine Co." />}
-        </Field>
-      </div>
-    </Modal>
-  );
-}
-
 function SettingsInner() {
   const params = useSearchParams();
   const router = useRouter();
@@ -112,21 +65,20 @@ function SettingsInner() {
   const tab = (TABS.find((t) => t.k === params.get("tab"))?.k ?? "profile") as TabKey;
   const go = (k: TabKey) => router.replace(`/settings?tab=${k}`, { scroll: false });
 
-  const profile = useForm({ name: "Selam", email: "selam@harborpine.co", role: "Founder & CEO", tz: "America/Los_Angeles" }, (v) => ({
+  const { user } = useData();
+  const profile = useForm({ name: user?.name ?? "", email: user?.email ?? "", role: user?.role ?? "", tz: "Africa/Addis_Ababa" }, (v) => ({
     name: !v.name.trim() ? "Enter your name." : "",
     email: !v.email.trim() ? "Enter your email." : !isEmail(v.email) ? "Enter a valid email, like name@company.com." : "",
   }));
-  const company = useForm({ name: "Harbor & Pine Co.", industry: "Software & SaaS", country: "Ethiopia", tin: "", address: "Bole Office Park, Floor 4, Addis Ababa" }, (v) => ({
+  const company = useForm({ name: user?.company ?? "", industry: "Software & SaaS", country: "Ethiopia", tin: "", address: "" }, (v) => ({
     name: !v.name.trim() ? "Enter your company’s legal name." : "",
     tin: v.tin && !/^\d{10}$/.test(v.tin.replace(/\s/g, "")) ? "An Ethiopian TIN has 10 digits." : "",
   }));
   const finance = useForm({ currency: "USD — US dollar", fy: "January", basis: "Accrual", reserve: "3" }, (v) => ({
     reserve: !/^\d+$/.test(v.reserve) || +v.reserve < 1 || +v.reserve > 24 ? "Enter a whole number of months between 1 and 24." : "",
   }));
-  const [toggles, setToggles] = useState<Record<string, boolean>>({ calc: true, charts: true, train: false, nBud: true, nCash: true, nAnom: true, nTask: true, nWeekly: false, nProd: false, twofa: true, newSignin: true });
+  const [toggles, setToggles] = useState<Record<string, boolean>>({ calc: true, charts: true, train: false, nBud: true, nCash: true, nAnom: true, nTask: true, nWeekly: false, nProd: false });
   const t = (k: string, label: string) => <Switch checked={toggles[k]} label={label} onChange={(v) => { setToggles({ ...toggles, [k]: v }); toast(`${label} ${v ? "on" : "off"}`); }} />;
-  const [dialog, setDialog] = useState<"password" | "delete" | "2fa" | null>(null);
-  const [sessions, setSessions] = useState([["Chrome on Windows", "Addis Ababa · This device", true], ["Fremwork for iOS", "Addis Ababa · 2 hours ago", false], ["Safari on macOS", "Nairobi · Oct 12", false]] as [string, string, boolean][]);
 
   return (
     <div className="page">
@@ -188,52 +140,9 @@ function SettingsInner() {
               <Row title="Product updates" sub="New features and improvements.">{t("nProd", "Product updates")}</Row>
             </div>
           </>}
-          {tab === "security" && <>
-            <div><h2 style={{ margin: 0, fontSize: 18 }}>Security</h2><p className="muted" style={{ margin: "4px 0 0" }}>Protect your account and your financial data.</p></div>
-            <div>
-              <Row title="Two-step verification" sub="Require a code from your authenticator app at sign-in."><Switch checked={toggles.twofa} label="Two-step verification" onChange={(v) => (v ? (setToggles({ ...toggles, twofa: true }), toast("Two-step verification on")) : setDialog("2fa"))} /></Row>
-              <Row title="Alert on new sign-ins" sub="Email me when my account is used on a new device.">{t("newSignin", "New sign-in alerts")}</Row>
-              <Row title="Password" sub="Last changed 3 months ago"><button className="btn sm" onClick={() => setDialog("password")}>Change password</button></Row>
-            </div>
-            <div>
-              <div className="overline" style={{ marginBottom: 8 }}>Active sessions</div>
-              <div className="card">
-                {sessions.map(([d, w, cur]) => (
-                  <div key={d} className="list-row"><span className="main"><b>{d}</b><small>{w}</small></span>
-                    {cur ? <span className="status ok">Current</span> : <button className="btn sm text-danger" onClick={() => { setSessions(sessions.filter((s) => s[0] !== d)); toast(`Signed out of ${d}`); }}>Sign out</button>}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div style={{ border: "1px solid var(--neg-line)", borderRadius: 12, padding: 16, display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-              <div><b style={{ fontWeight: 500 }}>Delete workspace</b><p className="muted" style={{ margin: "2px 0 0", fontSize: 13 }}>Permanently delete Harbor &amp; Pine Co. and everything in it.</p></div>
-              <button className="btn text-danger" style={{ borderColor: "var(--neg-line)" }} onClick={() => setDialog("delete")}>Delete workspace</button>
-            </div>
-          </>}
-          {tab === "billing" && <>
-            <div><h2 style={{ margin: 0, fontSize: 18 }}>Subscription &amp; billing</h2><p className="muted" style={{ margin: "4px 0 0" }}>Your plan, usage and invoices.</p></div>
-            <Banner tone="warn" title="Your card expires next month.">Update it before Nov 14 so your renewal doesn’t fail.</Banner>
-            <div className="card card-pad" style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
-              <div><span className="mono" style={{ fontSize: 10, background: "var(--volt)", padding: "1px 7px", borderRadius: 999, fontWeight: 500 }}>PRO</span><div style={{ fontSize: 22, fontWeight: 600, marginTop: 6 }}>Fremwork Pro</div><small className="muted">[YOUR PRICE] a month · renews Nov 14, 2026</small></div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn" onClick={() => toast("Plan changes arrive with the billing backend")}>Change plan</button><button className="btn primary" onClick={() => toast("Upgrades arrive with the billing backend")}>Upgrade to Business</button></div>
-            </div>
-            <div className="grid cols-3">
-              {([["AI analyses", 342, 1000], ["File uploads", 186, 200], ["Team seats", 3, 5]] as const).map(([l, a, b]) => (
-                <div key={l} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><b style={{ fontWeight: 500 }}>{l}</b><span className="muted num">{a.toLocaleString()} / {b.toLocaleString()}</span></div>
-                  <Progress value={(a / b) * 100} tone={a / b >= 0.9 ? "near" : undefined} />
-                  {a / b >= 0.9 && <small style={{ color: "var(--warn)", fontSize: 12 }}>Almost at your limit. Uploads pause at {b}.</small>}
-                </div>
-              ))}
-            </div>
-            <Row title="Payment method" sub="Visa ending 4417 · expires 11/26"><button className="btn sm" onClick={() => toast("Card updates arrive with the billing backend")}>Update</button></Row>
-          </>}
         </section>
       </div>
       <style>{`@media (max-width: 860px) { #settings-grid { grid-template-columns: minmax(0,1fr) !important; } #settings-nav { flex-direction: row !important; } #settings-nav .nav-item { width: auto; } }`}</style>
-      {dialog === "password" && <PasswordDialog onClose={() => setDialog(null)} />}
-      {dialog === "delete" && <DeleteWorkspace onClose={() => setDialog(null)} />}
-      {dialog === "2fa" && <ConfirmDialog danger title="Turn off two-step verification?" confirmLabel="Turn off" onClose={() => setDialog(null)} body="Anyone with your password could sign in to your financial data. We recommend keeping it on." onConfirm={() => { setToggles({ ...toggles, twofa: false }); setDialog(null); toast("Two-step verification off", "err"); }} />}
     </div>
   );
 }

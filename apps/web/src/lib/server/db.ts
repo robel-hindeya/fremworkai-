@@ -1,15 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
-import {
-  CATS,
-  CONVERSATIONS,
-  GOALS,
-  PROJECTS,
-  SOURCES,
-  TASKS,
-  TRANSACTIONS,
-} from "@/lib/data";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const DB_PATH = path.join(DATA_DIR, "fremwork.sqlite");
@@ -28,7 +19,6 @@ export function getDb(): DatabaseSync {
   _db.exec("PRAGMA synchronous = NORMAL;");
 
   initSchema(_db);
-  seedIfEmpty(_db);
 
   return _db;
 }
@@ -109,17 +99,6 @@ function initSchema(db: DatabaseSync) {
       created_at TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS data_sources (
-      id TEXT PRIMARY KEY,
-      name TEXT NOT NULL,
-      kind TEXT NOT NULL,
-      detail TEXT NOT NULL,
-      status TEXT NOT NULL,
-      message TEXT,
-      progress INTEGER,
-      updated_at TEXT NOT NULL
-    );
-
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
@@ -143,97 +122,4 @@ function initSchema(db: DatabaseSync) {
     );
     CREATE INDEX IF NOT EXISTS idx_messages_convo ON messages(conversation_id);
   `);
-}
-
-export function seedIfEmpty(db: DatabaseSync) {
-  const txCount = db.prepare("SELECT COUNT(*) as count FROM transactions").get() as { count: number };
-  if (txCount.count > 0) return;
-
-  const now = new Date().toISOString();
-
-  // Seed User
-  db.prepare(`
-    INSERT OR IGNORE INTO users (id, email, password_hash, name, company, role, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run("usr-1", "selam@harborpine.co", "demo1234", "Selam", "Harbor & Pine Co.", "Owner", now);
-
-  // Seed Transactions
-  const insertTx = db.prepare(`
-    INSERT INTO transactions (id, name, memo, cat, date, amt, status, method, note, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const t of TRANSACTIONS) {
-    insertTx.run(t.id, t.name, t.memo, t.cat, t.date, t.amt, t.status, t.method, null, now);
-  }
-
-  // Seed Budgets
-  const insertBudget = db.prepare(`
-    INSERT INTO budgets (id, k, oct, sep, budget, owner, alert, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (let i = 0; i < CATS.length; i++) {
-    const c = CATS[i];
-    insertBudget.run(`b-${i + 1}`, c.k, c.oct, c.sep, c.budget, c.owner, "90% of budget", now);
-  }
-
-  // Seed Goals
-  const insertGoal = db.prepare(`
-    INSERT INTO goals (id, type, name, cur, target, start, date, down, status, ai, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const g of GOALS) {
-    insertGoal.run(g.id, g.type, g.name, g.cur, g.target, g.start, g.date, g.down ? 1 : 0, g.status, g.ai, now);
-  }
-
-  // Seed Projects
-  const insertProj = db.prepare(`
-    INSERT INTO projects (id, name, desc, chats_json, docs_json, reports_json, updated, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const p of PROJECTS) {
-    insertProj.run(
-      p.id,
-      p.name,
-      p.desc,
-      JSON.stringify(p.chats),
-      JSON.stringify(p.docs),
-      JSON.stringify(p.reports),
-      p.updated,
-      now
-    );
-  }
-
-  // Seed Tasks
-  const insertTask = db.prepare(`
-    INSERT INTO tasks (id, name, prompt, freq, next_run, last_run, last_failed, is_on, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const t of TASKS) {
-    insertTask.run(t.id, t.name, t.prompt, t.freq, t.next, t.last, t.lastFailed ? 1 : 0, t.on ? 1 : 0, now);
-  }
-
-  // Seed Data Sources
-  const insertSource = db.prepare(`
-    INSERT INTO data_sources (id, name, kind, detail, status, message, progress, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const s of SOURCES) {
-    insertSource.run(s.id, s.name, s.kind, s.detail, s.status, s.message || null, s.progress || null, now);
-  }
-
-  // Seed Conversations & Messages
-  const insertConvo = db.prepare(`
-    INSERT INTO conversations (id, title, project_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?)
-  `);
-  const insertMsg = db.prepare(`
-    INSERT INTO messages (id, conversation_id, role, kind, mode, status, text, file_name, files_json, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  for (const c of CONVERSATIONS) {
-    insertConvo.run(c.id, c.title, null, now, now);
-    insertMsg.run(`${c.id}-q`, c.id, "user", null, null, "done", c.q, null, "[]", now);
-    insertMsg.run(`${c.id}-a`, c.id, "ai", c.kind, "Balanced", "done", null, null, "[]", now);
-  }
 }

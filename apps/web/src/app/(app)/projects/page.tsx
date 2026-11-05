@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Folder, Plus } from "lucide-react";
 import { useState } from "react";
 import { ProjectDialog } from "@/components/forms";
-import { PageHeader } from "@/components/ui";
+import { Empty, PageHeader } from "@/components/ui";
 import { useData } from "@/lib/client/store";
 
 export default function Projects() {
@@ -13,8 +13,9 @@ export default function Projects() {
 
   return (
     <div className="page">
-      <PageHeader eyebrow="Workspace" title="Projects" sub="Keep related conversations, documents and reports together." demo={false}
+      <PageHeader eyebrow="Workspace" title="Projects" sub="Keep related conversations, documents and reports together."
         actions={<button className="btn primary" onClick={() => setCreating(true)}><Plus size={16} />New project</button>} />
+      {projects.length === 0 && <div className="card"><Empty icon={<Folder size={18} />} title="No projects yet." action={<button className="btn primary" onClick={() => setCreating(true)}>Create your first project</button>}>Group related chats and reports together.</Empty></div>}
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}>
         {projects.map((p) => (
           <Link key={p.id} href={`/projects/${p.id}`} className="card card-pad" style={{ display: "flex", flexDirection: "column", gap: 12, textDecoration: "none", color: "inherit", minHeight: 200 }}>

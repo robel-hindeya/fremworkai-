@@ -119,6 +119,16 @@ export const ChatRepo = {
     };
   },
 
+  /** Removes the AI replies after the last user message, so that message can be answered again. */
+  dropTrailingAiMessages(conversationId: string) {
+    const db = getDb();
+    const messages = this.getConversation(conversationId)?.messages ?? [];
+    for (const m of messages.reverse()) {
+      if (m.role !== "ai") break;
+      db.prepare("DELETE FROM messages WHERE id = ?").run(m.id);
+    }
+  },
+
   updateMessage(id: string, patch: Partial<MessageRecord>) {
     const db = getDb();
     const current = db.prepare("SELECT * FROM messages WHERE id = ?").get(id) as any;
